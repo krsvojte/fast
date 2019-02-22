@@ -1,17 +1,17 @@
-# batterylib
+# fast
 
 
 
 
 <p align="middle">
-<img src="https://github.com/krsvojte/batterylib/blob/master/images/solver.gif" alt="Solver Tortuosity"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/solver.gif" alt="Solver Tortuosity"/>
 </p>
 
 <p align="left">
-<img src="https://github.com/krsvojte/batterylib/blob/master/images/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" height="221"/>
-<img src="https://github.com/krsvojte/batterylib/blob/master/images/packed_ellipsoids_02.gif" alt="Ellipsoids r=1/2" height="221"/>
-<img src="https://github.com/krsvojte/batterylib/blob/master/images/packed_ellipsoids_04.gif" alt="Ellipsoids r=1/4" height="221"/>
-<img src="https://github.com/krsvojte/batterylib/blob/master/images/packed_ellipsoids_10.gif" alt="Ellipsoids r=1/10" height="221"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" height="295"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_035.gif" alt="Ellipsoids r=0.35" height="295"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_10.gif" alt="Ellipsoids r=1/10" height="295"/>
+
 </p>
 
 
@@ -31,8 +31,8 @@
 - CMake 3.2+ required
 
 ```
-git clone https://github.com/krsvojte/batterylib.git
-cd batterylib
+git clone https://github.com/krsvojte/fast.git
+cd fast
 git submodule init
 git submodule update
 mkdir build
@@ -48,12 +48,12 @@ cd ..
 
 ## Usage:
 ```
-./batterytool [action] [parameters]
+./fast [action] [parameters]
 ```
 
 ### Tortuosity calculation (tau)
 ```
-./batterytool tau [input file or folder] -o output.csv -dx
+./fast tau [input file or folder] -o output.csv -dx
 ```
 Calculates torutosity in x-direction and outputs to a comma separated file.
 #### Flags
@@ -68,7 +68,7 @@ Calculates torutosity in x-direction and outputs to a comma separated file.
 
 ### Reactive area density calculation (alpha)
 ```
-./batterytool alpha [input file or folder] -o output.csv -dx 
+./fast alpha [input file or folder] -o output.csv -dx 
 ```
 Calculates reactive area density in x-direction and outputs to a comma separated file.
 #### Flags
