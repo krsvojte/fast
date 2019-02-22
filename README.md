@@ -8,9 +8,9 @@
 </p>
 
 <p align="left">
-<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" height="295"/>
-<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_035.gif" alt="Ellipsoids r=0.35" height="295"/>
-<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_10.gif" alt="Ellipsoids r=1/10" height="295"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" width="295"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_035.gif" alt="Ellipsoids r=0.35" width="295"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_10.gif" alt="Ellipsoids r=1/10" width="295"/>
 
 </p>
 
