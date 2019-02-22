@@ -1,6 +1,4 @@
-# fast
-
-
+# Fasτ: Accelerated Data Driven Microstructural Design of Porous Electrodes for Battery Applications
 
 
 <p align="middle">
