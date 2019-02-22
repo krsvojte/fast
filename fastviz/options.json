@@ -1,0 +1,302 @@
+{
+    "Diffusion": {
+        "BICG": {
+            "data": true,
+            "type": 5
+        },
+        "C_high": {
+            "data": 1.0,
+            "type": 3
+        },
+        "C_low": {
+            "data": 0.0,
+            "type": 3
+        },
+        "D_one": {
+            "data": 1.0000000116861e-07,
+            "type": 3
+        },
+        "D_zero": {
+            "data": 1.0,
+            "type": 3
+        },
+        "Tolerance": {
+            "data": 6,
+            "type": 2
+        },
+        "direction": {
+            "data": 1,
+            "type": 2
+        },
+        "expD_one": {
+            "data": 5,
+            "type": 2
+        },
+        "maxIter": {
+            "data": 10000,
+            "type": 2
+        },
+        "voxelSize": {
+            "data": 1.0,
+            "type": 3
+        }
+    },
+    "Generator": {
+        "Filled": {
+            "value": {
+                "data": 0,
+                "type": 2
+            }
+        },
+        "NumParticles": {
+            "data": 2,
+            "type": 2
+        },
+        "Resolution": {
+            "data": 128,
+            "type": 2
+        },
+        "Spheres": {
+            "MaxTries": {
+                "data": 1000000,
+                "type": 2
+            },
+            "N": {
+                "data": 500,
+                "type": 2
+            },
+            "Overlapping": {
+                "data": false,
+                "type": 5
+            },
+            "RadiusMax": {
+                "data": 0.0500000007450581,
+                "type": 3
+            },
+            "RadiusMin": {
+                "data": 0.0500000007450581,
+                "type": 3
+            },
+            "WithinBounds": {
+                "data": true,
+                "type": 5
+            }
+        }
+    },
+    "Input": {
+        "Default": {
+            "data": false,
+            "type": 5
+        },
+        "DefaultPath": {
+            "data": "../../data/graphiteSections/SL43_C5_1c5bar_Data/SL43_C5_1c5bar_section001",
+            "type": 0
+        },
+        "GenResolution": {
+            "data": 400,
+            "type": 2
+        },
+        "LoadOrigin": {
+            "data": [
+                0,
+                0,
+                0
+            ],
+            "type": 10
+        },
+        "LoadResolution": {
+            "data": [
+                250,
+                250,
+                100
+            ],
+            "type": 10
+        },
+        "Sphere": {
+            "data": true,
+            "type": 5
+        },
+        "SphereHollow": {
+            "data": false,
+            "type": 5
+        }
+    },
+    "Optim": {
+        "SA": {
+            "MRD": {
+                "data": 1.0,
+                "type": 3
+            },
+            "MRDDeltaRad": {
+                "data": 0.150000005960464,
+                "type": 3
+            },
+            "N": {
+                "data": 32,
+                "type": 2
+            },
+            "doRotate": {
+                "data": false,
+                "type": 5
+            },
+            "doScale": {
+                "data": true,
+                "type": 5
+            },
+            "doTranslate": {
+                "data": true,
+                "type": 5
+            },
+            "neighbourStep": {
+                "data": 0.150000005960464,
+                "type": 3
+            },
+            "scaleInit": {
+                "data": 0.100000001490116,
+                "type": 3
+            },
+            "scaleMultMax": {
+                "data": 2.0,
+                "type": 3
+            },
+            "scaleMultMin": {
+                "data": 0.5,
+                "type": 3
+            }
+        },
+        "diffusivity": {
+            "data": 1.0,
+            "type": 4
+        },
+        "maxSteps": {
+            "data": 2096,
+            "type": 2
+        },
+        "stepsPerFrame": {
+            "data": 1,
+            "type": 2
+        }
+    },
+    "Render": {
+        "MarchingCubesIso": {
+            "data": 0.5,
+            "type": 3
+        },
+        "MarchingCubesRes": {
+            "data": 128,
+            "type": 2
+        },
+        "MarchingCubesSmooth": {
+            "data": 0.0,
+            "type": 3
+        },
+        "MarchingCubesWire": {
+            "data": false,
+            "type": 5
+        },
+        "Packing": {
+            "BB": {
+                "data": false,
+                "type": 5
+            }
+        },
+        "SceneGeometry": {
+            "BoundingBoxes": {
+                "data": true,
+                "type": 5
+            },
+            "Enabled": {
+                "data": true,
+                "type": 5
+            }
+        },
+        "channel": {
+            "data": 0,
+            "type": 2
+        },
+        "ellipsoids": {
+            "data": false,
+            "type": 5
+        },
+        "ellipsoidsBounds": {
+            "data": false,
+            "type": 5
+        },
+        "normalizeHigh": {
+            "data": 1.0,
+            "type": 3
+        },
+        "normalizeLow": {
+            "data": 0.0,
+            "type": 3
+        },
+        "opacityBlack": {
+            "data": 0.00999999977648258,
+            "type": 3
+        },
+        "opacityWhite": {
+            "data": 0.100000001490116,
+            "type": 3
+        },
+        "particles": {
+            "data": true,
+            "type": 5
+        },
+        "preserveAspectRatio": {
+            "data": true,
+            "type": 5
+        },
+        "scene": {
+            "data": false,
+            "type": 5
+        },
+        "showGradient": {
+            "data": false,
+            "type": 5
+        },
+        "sliceMax": {
+            "data": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "type": 7
+        },
+        "sliceMin": {
+            "data": [
+                -1.0,
+                -1.0,
+                -1.0
+            ],
+            "type": 7
+        },
+        "slices": {
+            "data": false,
+            "type": 5
+        },
+        "transferDefault": {
+            "data": true,
+            "type": 5
+        },
+        "transferFunc": {
+            "data": 0,
+            "type": 2
+        },
+        "volume": {
+            "data": true,
+            "type": 5
+        },
+        "volumeFiltering": {
+            "data": true,
+            "type": 5
+        },
+        "volumeGrid": {
+            "data": false,
+            "type": 5
+        },
+        "volumeGridOpacity": {
+            "data": 0.0500000007450581,
+            "type": 3
+        }
+    }
+}

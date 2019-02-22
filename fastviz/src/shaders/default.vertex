@@ -1,0 +1,27 @@
+layout (location = 0) in vec3 in_pos;
+layout (location = 1) in vec3 in_normal;
+layout (location = 2) in vec2 in_uv;
+layout (location = 3) in vec4 in_color;
+
+out VARYING {
+	vec3 pos;
+	vec3 normal;
+	vec2 uv;
+	vec4 color;
+} vs_out;
+
+uniform mat4 PV;
+uniform mat4 M;
+uniform mat4 NM;
+
+void main()
+{	    
+	//Pos and normal to world space
+    vs_out.pos = (M * vec4(in_pos, 1.0)).xyz; 
+    vs_out.normal = (NM * vec4(in_normal,0.0)).xyz;
+    vs_out.uv = in_uv;
+    vs_out.color = in_color;   
+
+    //To clip space
+    gl_Position = PV * vec4(vs_out.pos,1.0);
+}
