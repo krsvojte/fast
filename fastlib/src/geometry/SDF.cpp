@@ -77,22 +77,105 @@ namespace fast {
 
 
 
+	distfun::DistProgram SDFOverlapProgram(
+		const SDFArray & arr,
+		const distfun::AABB & domain
+	){
+
+
+
+		distfun::DistProgram p;
+
+		if (arr.size() == 0) {
+			return distfun::DistProgram();
+		}
+
+		//Primitive bounds
+		std::vector<distfun::AABB> aabbs;
+		aabbs.resize(arr.size(), distfun::AABB());
+
+		for (auto i = 0; i < arr.size(); i++) {
+			aabbs[i] = primitiveBounds(arr[i], glm::length(domain.diagonal()) * 0.5f);
+		}
+
+		std::vector<std::pair<int, int>> pairs;
+		std::vector<std::unique_ptr<distfun::TreeNode>> subtrees;
+
+		for (auto i = 0; i < arr.size(); i++) {
+			for (auto j = i + 1; j < arr.size(); j++) {
+				if (!aabbs[i].intersect(aabbs[j]).isValid()) continue;					
+
+				auto nodeI = std::make_unique<distfun::TreeNode>();
+				nodeI->primitive = arr[i];
+
+				auto nodeJ = std::make_unique<distfun::TreeNode>();
+				nodeJ->primitive = arr[j];
+
+
+				auto subRoot = std::make_unique<distfun::TreeNode>();
+				subRoot->primitive.type = distfun::Primitive::Type::SD_OP_INTERSECT;
+				subRoot->children[0] = std::move(nodeI);
+				subRoot->children[1] = std::move(nodeJ);
+
+				subtrees.push_back(std::move(subRoot));								
+			}
+		}
+
+		std::cout << "Collision subtrees: " << arr.size() << std::endl;
+
+		//No overlaps, return empty progra
+		if (subtrees.size() == 0) {
+			return p;
+		}
+
+		//One overlap, return subtree directly
+		if(subtrees.size() == 1){
+			return distfun::compileProgram(*subtrees.front());
+		}
+
+		//Two or more, consturct tree tail
+		auto root = std::make_unique<distfun::TreeNode>();
+		root->primitive.type = distfun::Primitive::SD_OP_UNION;
+		root->children[0] = std::move(subtrees[0]);
+		root->children[1] = std::move(subtrees[1]);
+
+		//Add depth to tree
+		for (auto i = 2; i < subtrees.size(); i++) {
+			auto newRoot = std::make_unique<distfun::TreeNode>();
+			newRoot->primitive.type = distfun::Primitive::SD_OP_UNION;
+			newRoot->children[0] = std::move(root);
+			newRoot->children[1] = std::move(subtrees[i]);
+			root = std::move(newRoot);			
+		}
+
+		return distfun::compileProgram(*root);
+	}
+
 	void SDFRasterize(
 		const SDFArray & arr, 
 		const distfun::AABB & domain, 
 		Volume & volume,
 		bool invert,
-		bool commitToGPU
+		bool commitToGPU,
+		bool overlap
 	)
 	{
 
+		std::vector<unsigned char> programData;
 		
-		
-		auto program = SDFToProgram(arr, invert ? &domain : nullptr);
+		if (overlap) {
+			auto program = SDFOverlapProgram(arr, domain);
+			programData.resize(program.staticSize());
+			commitProgramCPU(programData.data(), program);
+		}
+		else {
+			auto program = SDFToProgram(arr, invert ? &domain : nullptr);
+			programData.resize(program.staticSize());
+			commitProgramCPU(programData.data(), program);
+		}	
 
-		std::vector<unsigned char> programData(program.staticSize());
-		commitProgramCPU(programData.data(), program);
-		distfun::DistProgramStatic *programDataPtr = reinterpret_cast<distfun::DistProgramStatic*>(programData.data());
+		distfun::DistProgramStatic *programDataPtr = 
+			reinterpret_cast<distfun::DistProgramStatic*>(programData.data());
 
 
 		uchar * volptr = (uchar*)volume.getPtr().getCPU();
@@ -106,17 +189,74 @@ namespace fast {
 
 		float cellVolume = cellSize.x * cellSize.y * cellSize.z;
 
-		#pragma omp parallel for			
-		for (auto z = 0; z < volume.dim().z; z++) {
-			for (auto y = 0; y < volume.dim().y; y++) {
-				for (auto x = 0; x <  volume.dim().x; x++) {
-					auto index = linearIndex(volume.dim(), ivec3(x, y, z));
-					distfun::vec3 pos = domain.min + vec3(cellSize.x * x, cellSize.y * y, cellSize.z* z);
-					float d = distfun::distanceAtPos<64>(pos, programDataPtr);
-					volptr[index] = (d < 0.0f) ? 255 : 0;
+		if (overlap) {
+
+			float minCellSize = glm::min(cellSize.x, glm::min(cellSize.y, cellSize.z));
+
+#ifndef _DEBUG
+			#pragma omp parallel for			
+#endif
+			for (auto z = 0; z < volume.dim().z; z++) {
+				for (auto y = 0; y < volume.dim().y; y++) {
+					for (auto x = 0; x < volume.dim().x; x++) {
+						auto index = linearIndex(volume.dim(), ivec3(x, y, z));
+						distfun::vec3 pos = domain.min + vec3(cellSize.x * x, cellSize.y * y, cellSize.z* z) + cellSize * 0.5f;
+						float d = distfun::distanceAtPos<64>(pos, programDataPtr);
+						if (d >= 0.0f) {
+							volptr[index] = 0;
+							continue;
+						}
+
+						distfun::AABB sampleBB = { pos - cellSize * 0.5f, pos + cellSize * 0.5f };
+						int sampleN = 2;
+						vec3 nsum = vec3(0);
+						for (auto ix = 0; ix < sampleN; ix++) {
+							for (auto iy = 0; iy < sampleN; iy++) {
+								for (auto iz = 0; iz < sampleN; iz++) {
+									vec3 spos = sampleBB.getSubGrid(ivec3(2), ivec3(ix,iy,iz)).center();
+									float eps = minCellSize * 1;// / 10.0f;
+									vec3 n = distfun::distNormal(spos, eps, distfun::distanceAtPos<64>, programDataPtr);
+									nsum += n;
+									/*float nmag = glm::length(n);
+									if (nmag < eps*2.0f)
+										volptr[index] = 255;
+									else
+										volptr[index] = 0;*/
+								}
+							}
+						}
+
+						nsum = nsum * (1.0f / (sampleN*sampleN*sampleN));
+						if (glm::length(nsum) < 0.990f){
+							volptr[index] = 255;
+						}
+						else {
+							volptr[index] = 0;
+						}
+						
+
+											
+					}
+				}
+			}
+		
+		
+		}
+		else {
+			#pragma omp parallel for			
+			for (auto z = 0; z < volume.dim().z; z++) {
+				for (auto y = 0; y < volume.dim().y; y++) {
+					for (auto x = 0; x < volume.dim().x; x++) {
+						auto index = linearIndex(volume.dim(), ivec3(x, y, z));
+						distfun::vec3 pos = domain.min + vec3(cellSize.x * x, cellSize.y * y, cellSize.z* z) + cellSize * 0.5f;
+						float d = distfun::distanceAtPos<64>(pos, programDataPtr);
+						volptr[index] = (d < 0.0f) ? 255 : 0;
+					}
 				}
 			}
 		}
+		
+
 
 		if (commitToGPU) {
 			volume.getPtr().commit();

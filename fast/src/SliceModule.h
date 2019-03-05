@@ -74,7 +74,16 @@ public:
 
 			std::string volDir = _argOutputFolder.Get() + "/" + stem;
 //			utils::mkdir(volDir.c_str());
+
+			ivec3 counts = {
+				(end.x - begin.x) / stride.x,
+				(end.y - begin.y) / stride.y,
+				(end.z - begin.z) / stride.z
+			};
+			int totalCount = counts.x * counts.y * counts.z;
+			std::cout << "Subvolume count " << counts.x << ", " << counts.y << ", " << counts.z << ", total: " << totalCount << std::endl;
 			
+
 			for (auto x0 = begin.x; x0 + size.x <= end.x; x0 += stride.x) {
 				for (auto y0 = begin.y; y0 + size.y <= end.y; y0 += stride.y) {
 					for (auto z0 = begin.z; z0 + size.z <= end.z; z0 += stride.z) {
@@ -84,7 +93,9 @@ public:
 						ivec3 origin = { x0,y0,z0 };
 						ivec3 dim = size;
 						ivec3 outer = origin + size;
-						std::cout << "Subvolume " << origin << " to " << outer << std::endl;
+						std::cout << "Subvolume " << origin << " to " << outer;
+						std::cout << " | " << subCount << "/" << totalCount;
+						std::cout << " (" << (subCount / float(totalCount)) * 100 << "%)" << std::endl;
 
 						size_t totalSize = size.x * size.y * size.z;
 
@@ -103,16 +114,18 @@ public:
 							rowAlpha = AlphaModule::getAlpha(subvolume, name, true, { X_POS })[0];
 
 						std::vector<RunRow> rowsTau;
-						if(doTau)
+						if (doTau) {
+							int cpuThreshold = 72*72*72;
 							rowsTau = TauModule::getTau(
-								subvolume, 
-								name, (totalSize < 96*96*96), -1, false, 
-								dirs, TYPE_FLOAT, DSOLVER_CG, 10000, 
-								tolerance, false 
+								subvolume,
+								name, (totalSize < cpuThreshold), -1, false,
+								dirs, TYPE_FLOAT, DSOLVER_CG, 10000,
+								tolerance, false
 							);
+						}
 
-						
-
+#define PER_SLICE		
+#ifdef PER_SLICE
 						for (int k = 0; k < dirs.size(); k++) {
 							Dir dir = dirs[k];
 
@@ -167,7 +180,11 @@ public:
 
 							//Slicing
 							
-						}					
+						}			
+#else
+						std::string path = subvolDir + "/" + "vol.bin";
+						fast::saveVolumeBinary(path.c_str(), subvolume);
+#endif
 						
 
 						//auto rowTau= AlphaModule::getAlpha(subvolume, name, true, { X_POS })[0];

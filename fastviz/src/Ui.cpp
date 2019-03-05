@@ -506,8 +506,22 @@ void Ui::update(double dt)
 	static bool enableRADMesh = true;
 	
 	if (ImGui::Button("Pad by 1")) {
-		_app._volumes[CHANNEL_MASK] = std::make_unique<fast::Volume>(
-			_app._volumes[CHANNEL_MASK]->withZeroPadding(ivec3(1), ivec3(1))
+		int channelID = _app._options["Render"].get<int>("channel");
+		auto it = std::next(_app._volumes.begin(), channelID);
+		auto & renderChannel = (it->second);
+
+		renderChannel = std::make_unique<fast::Volume>(
+			renderChannel->withZeroPadding(ivec3(1), ivec3(1))
+			);
+	}
+
+	if (ImGui::Button("Pad by -1")) {
+		int channelID = _app._options["Render"].get<int>("channel");
+		auto it = std::next(_app._volumes.begin(), channelID);
+		auto & renderChannel = (it->second);
+
+		renderChannel = std::make_unique<fast::Volume>(
+			renderChannel->withZeroPadding(ivec3(-1), ivec3(-1))
 			);
 	}
 
@@ -735,6 +749,10 @@ void Ui::update(double dt)
 			int(res * (range.z / maxSide))
 		};
 
+		if (_app._volumes[CHANNEL_MASK] == nullptr) {
+			_app._volumes[CHANNEL_MASK] = std::make_unique<fast::Volume>(res3, TYPE_UCHAR);
+		}
+
 		if (res != _app._volumes[CHANNEL_MASK]->dim().x) {
 			_app._volumes[CHANNEL_MASK] = std::make_unique<fast::Volume>(res3, TYPE_UCHAR);
 			_app._volumes[CHANNEL_MASK]->getPtr().createTexture();
@@ -798,6 +816,16 @@ void Ui::update(double dt)
 			_app._sdfpacking->rasterize();
 		}
 
+
+		if (ImGui::Button("Raster overlap") && _app._sdfpacking) {
+
+			auto res = _app._volumes[CHANNEL_MASK]->dim();
+			_app._volumes["overlap"] = std::make_unique<fast::Volume>(res, TYPE_UCHAR);
+			_app._volumes["overlap"]->getPtr().createTexture();
+			//_app._sdfpacking->setRasterVolume(_app._volumes[CHANNEL_MASK].get());
+			_app._sdfpacking->rasterizeOverlap(*_app._volumes["overlap"]);
+
+		}
 
 		if (_app._sdfpacking) {
 			auto & vec = _app._sdfpacking->getSA().scoreHistory;

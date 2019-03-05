@@ -68,6 +68,7 @@ namespace fast {
 		*/
 		FAST_EXPORT void setRasterVolume(Volume * volptr);
 		FAST_EXPORT void rasterize(bool commit = true);
+		FAST_EXPORT void rasterizeOverlap(Volume & volume);
 
 		FAST_EXPORT std::vector<AABB> getParticleBounds() const;
 

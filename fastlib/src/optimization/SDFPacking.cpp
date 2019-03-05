@@ -370,6 +370,17 @@ void fast::SDFPacking::rasterize(bool commit)
 
 }
 
+FAST_EXPORT void fast::SDFPacking::rasterizeOverlap(Volume & volume)
+{
+	SDFRasterize(_showBest ? _sa.bestState : _sa.state,
+	{ _domain.min, _domain.max },
+		volume,
+		false,
+		true, 
+		true);
+}
+
+
 std::vector<fast::AABB> fast::SDFPacking::getParticleBounds() const
 {
 	std::vector<AABB> aabbs;

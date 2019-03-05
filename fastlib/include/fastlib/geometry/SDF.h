@@ -29,7 +29,8 @@ namespace fast {
 		const distfun::AABB & domain,
 		Volume & volume,
 		bool invert = false,
-		bool commitToGPU = true
+		bool commitToGPU = true,
+		bool overlap = false
 	);
 
 	float SDFVolume(
