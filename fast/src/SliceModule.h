@@ -45,7 +45,7 @@ public:
 		const bool doAlpha = true;
 		const bool doTau = true;
 
-		double tolerance = double(pow(10.0, -6));
+		double tolerance = double(pow(10.0, -5));
 
 		double avgTime = 0.0;
 		int avgTimeNum = 0;
@@ -103,8 +103,10 @@ public:
 
 						
 						char subvolstr[256];
-						std::sprintf(subvolstr, "%04d_%04d_%04d", origin.x, origin.y, origin.z);
-						std::string subvolDir = volDir + "/" + std::string(subvolstr);
+						std::sprintf(subvolstr, "%04d_%04d_%04d.bin", origin.x, origin.y, origin.z);
+						//std::string subvolDir = volDir + "/" + std::string(subvolstr);
+						std::string subvolPath = volDir + "/" + std::string(subvolstr);
+
 
 						subvolume.getPtr().createTexture();
 
@@ -124,7 +126,7 @@ public:
 							);
 						}
 
-#define PER_SLICE		
+	
 #ifdef PER_SLICE
 						for (int k = 0; k < dirs.size(); k++) {
 							Dir dir = dirs[k];
@@ -182,8 +184,41 @@ public:
 							
 						}			
 #else
-						std::string path = subvolDir + "/" + "vol.bin";
-						fast::saveVolumeBinary(path.c_str(), subvolume);
+
+						utils::mkdir(volDir.c_str());						
+						fast::saveVolumeBinary(subvolPath.c_str(), subvolume);
+
+						for (int k = 0; k < dirs.size(); k++) {
+
+							const Dir dir = dirs[k];
+							const auto dirIndex = getDirIndex(dir);
+							RunRow o;
+
+							size_t sublen = _argOutputFolder.Get().length() + 1;
+							o["ID"] = std::string(subvolPath, sublen, subvolPath.length() - sublen);
+
+							//o["IDVolume"] = name;
+							if (doAlpha) {
+								o["alpha"] = rowAlpha["radBasic"];
+								o["porosity"] = rowAlpha["porosity"];
+							}
+
+							if (doTau) {
+								o["tau"] = rowsTau[k]["tau"];
+							}
+
+							o["sizex"] = size.x;
+							o["sizey"] = size.y;
+							o["sizez"] = size.z;
+							o["originx"] = origin.x;
+							o["originy"] = origin.y;
+							o["originz"] = origin.z;
+							o["dir"] = dirString(dir);
+
+
+							_outputModule.addRunRow(o);
+						}
+
 #endif
 						
 
@@ -194,7 +229,11 @@ public:
 						double subTime = dt.count();
 						avgTime += subTime;
 						avgTimeNum++;
-						std::cout << "time " << subTime << "s, avg: " << avgTime / avgTimeNum << "s" << std::endl;
+
+						float ETAmin = ((avgTime / avgTimeNum) * (totalCount - subCount)) / 60.0f;
+
+						std::cout << "time " << subTime << " | avg: " << avgTime / avgTimeNum << "s" << " | ETA: " << ETAmin << "m" << std::endl;
+
 
 						subCount++;
 					}
