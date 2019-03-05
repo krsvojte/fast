@@ -75,13 +75,16 @@ public:
 			std::string volDir = _argOutputFolder.Get() + "/" + stem;
 //			utils::mkdir(volDir.c_str());
 
-			ivec3 counts = {
-				(end.x - begin.x) / stride.x,
-				(end.y - begin.y) / stride.y,
-				(end.z - begin.z) / stride.z
-			};
-			int totalCount = counts.x * counts.y * counts.z;
-			std::cout << "Subvolume count " << counts.x << ", " << counts.y << ", " << counts.z << ", total: " << totalCount << std::endl;
+			
+			int totalCount = 0;
+			for (auto x0 = begin.x; x0 + size.x <= end.x; x0 += stride.x) {				
+				for (auto y0 = begin.y; y0 + size.y <= end.y; y0 += stride.y) {					
+					for (auto z0 = begin.z; z0 + size.z <= end.z; z0 += stride.z) {
+						totalCount++;
+					}
+				}
+			}			
+			std::cout << "Subvolume count " << totalCount << std::endl;
 			
 
 			for (auto x0 = begin.x; x0 + size.x <= end.x; x0 += stride.x) {
