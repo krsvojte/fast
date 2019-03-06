@@ -51,9 +51,9 @@ public:
 		int avgTimeNum = 0;
 
 		while (true) {
-			auto volumePtr = _inputModule.getNext();
-			auto name = _inputModule.getVolumeName(volumePtr.get());
+			auto volumePtr = _inputModule.getNext();			
 			if (!volumePtr) break;
+			auto name = _inputModule.getVolumeName(volumePtr.get());
 			auto & volume = *volumePtr;
 
 			name = utils::string_replace(name, "\\", "/");
@@ -85,6 +85,11 @@ public:
 				}
 			}			
 			std::cout << "Subvolume count " << totalCount << std::endl;
+
+			if (totalCount == 0) {
+				std::cout << "Volume is not big enough " << volume.dim() << ", need " << size << std::endl;
+				continue;
+			}
 			
 
 			for (auto x0 = begin.x; x0 + size.x <= end.x; x0 += stride.x) {
@@ -106,8 +111,7 @@ public:
 
 						
 						char subvolstr[256];
-						std::sprintf(subvolstr, "%04d_%04d_%04d.bin", origin.x, origin.y, origin.z);
-						//std::string subvolDir = volDir + "/" + std::string(subvolstr);
+						std::sprintf(subvolstr, "%04d_%04d_%04d.bin", origin.x, origin.y, origin.z);						
 						std::string subvolPath = volDir + "/" + std::string(subvolstr);
 
 
