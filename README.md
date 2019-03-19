@@ -7,9 +7,9 @@
 -->
 
 <p align="left">
-<img src="https://github.com/krsvojte/fast/blob/master/images/compressed/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" width="280"/>
-<img src="https://github.com/krsvojte/fast/blob/master/images/compressed/packed_ellipsoids_035.gif" alt="Ellipsoids r=0.35" width="280"/>
-<img src="https://github.com/krsvojte/fast/blob/master/images/compressed/packed_ellipsoids_10.gif" alt="Ellipsoids r=1/10" width="280"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/compressed/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" width="150"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/compressed/packed_ellipsoids_035.gif" alt="Ellipsoids r=0.35" width="150"/>
+<img src="https://github.com/krsvojte/fast/blob/master/images/compressed/packed_ellipsoids_10.gif" alt="Ellipsoids r=1/10" width="150"/>
 
 </p>
 
