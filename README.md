@@ -1,9 +1,10 @@
 # Fasτ: Accelerated Data Driven Microstructural Design of Porous Electrodes for Battery Applications
 
-
+<!--
 <p align="middle">
 <img src="https://github.com/krsvojte/fast/blob/master/images/solver.gif" alt="Solver Tortuosity"/>
 </p>
+-->
 
 <p align="left">
 <img src="https://github.com/krsvojte/fast/blob/master/images/packed_ellipsoids_01.gif" alt="Ellipsoids r=1/1" width="295"/>
@@ -81,7 +82,9 @@ Can be used wtih both ```tau``` and ```alpha```
 - ```--sub [X,Y,Z]``` ```--origin [x0,y0,z0]``` crops subvolume of size ```(X,Y,Z)``` at position ```(x0,y0,z0)```
 
 ### Acknowledgements
-We would like to thank NVidia for providing graphics hardware. This research was funded in part by National Science Foundation grant #1608762, *Inverse Procedural Material Modeling for Battery Design*.
+Vojtech Krs and Bedrich Benes would  like  to  thank  NVidia  for  the graphics hardware provided.  This research was funded in part by National Science Foundation grant #1608762, *Inverse Procedural Material Modeling for Battery Design*. Abhas Deva and R. Edwin García thank the D3Batt Center at the Toyota Research Institute for the financial support.
+
+
 
 
 
