@@ -80,6 +80,8 @@ Can be used wtih both ```tau``` and ```alpha```
 - ```--sub [X]``` ```--origin [x0]``` crops subvolume of size ```X^3``` at position ```(x0,x0,x0)```
 - ```--sub [X,Y,Z]``` ```--origin [x0,y0,z0]``` crops subvolume of size ```(X,Y,Z)``` at position ```(x0,y0,z0)```
 
+### Acknowledgements
+This research was funded in part by National Science Foundation grant #1608762, Inverse Procedural Material Modeling for Battery Design.
 
 
 
