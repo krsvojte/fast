@@ -2,6 +2,7 @@
 #include "Module.h"
 
 #include <fastlib/optimization/SDFPacking.h>
+#include <fastlib/geometry/SDF.h>
 #include <tuple>
 #include <set>
 
@@ -21,7 +22,8 @@ public:
 		_argTolerance(group, "Tolerance", "Tolerance", { "targetTolerance" }, 0.03f),		
 		_argN(group, "N", "N particles", {'N','n'}, 8),
 		_argSize(group, "Size", "Size of particle, accepts either one argument x or comma separated x,y,z.", { 's', "size" }, vec3(0.5f)),
-		_argOutput(group, "Output", "Output .bin file.", {'o',"output"}, "out.bin"),
+		_argOutput(group, "Raster output", "Output .bin file.", {"rasterOutput"}, ""),
+		_argOutputSDF(group, "SDF Output", "Output .sdf file.", { "sdfOutput" }, ""),
 		_argMaxIter(group, "Max Iterations", "", {"maxIter"}, 2000),
 		_argSchedule(group, "Schedule", "Schedule", { "schedule" }, 0.99f),
 		_argRasterSize(group, "Raster Size", "Raster Size", {"raster"}, fast::ivec3(256)),
@@ -78,54 +80,101 @@ public:
 		//Iterate
 		size_t iterCnt = 0;		
 
+		const bool outputEveryUnique = false;
+
 		std::set<float> scoreSet;
 
-		while (_sdfpacking->step()) {	
+		std::cout << "Packing " << N << " particles ..." << std::endl;
+
+		while (true) {	
+
+			bool maxStepReached = !_sdfpacking->step();
 
 			/*float diff = glm::abs(_sdfpacking->getSA().bestStateScore - bestAchieavablePorosity);
 			float diffParticleRel = (diff * domain.volume()) / v0;*/
 
-			if (_sdfpacking->getSA().bestStateScore < 0.0000003f)
-				break;
+			/*if (_sdfpacking->getSA().bestStateScore < 0.0000003f)
+				break;*/
 
-			if (iterCnt % 1 == 0) {
+			if (iterCnt % 100 == 0) {
 				std::cout << "[" << iterCnt << "]\t";
-				std::cout << _sdfpacking->getSA().bestStateScore << std::endl;
-				//std::cout << "diff " << diff << " => " << diffParticleRel << " particles | tol: " << _argTolerance.Get() << std::endl;
+				std::cout << _sdfpacking->getSA().bestStateScore << std::endl;				
 				std::cout.flush();
+				//std::cout << "diff " << diff << " => " << diffParticleRel << " particles | tol: " << _argTolerance.Get() << std::endl;
 				/*if (diffParticleRel < _argTolerance.Get())
 					break;*/
 			}
 
 			if (_sdfpacking->getSA().rejections > 100) {
-				std::cout << "Too many rejections. Stopping." << std::endl;
+				std::cout << "Too many rejections. Stopping." << std::endl;				
+				maxStepReached = true;
 				break;
 			}
 
-			
+			if (_sdfpacking->getSA().bestStateScore <= 1e-6) {
+				maxStepReached = true;
+			}
 
-			if(_sdfpacking->getSA().bestStateScore < _argTolerance.Get() && 
-				scoreSet.find(_sdfpacking->getSA().bestStateScore) == scoreSet.end()
-				)
+			const bool isBelowTolerance = (_sdfpacking->getSA().bestStateScore < _argTolerance.Get());
+			const bool canOutputUnique = outputEveryUnique && scoreSet.find(_sdfpacking->getSA().bestStateScore) == scoreSet.end();
+
+			if(
+				isBelowTolerance && (
+					canOutputUnique || (!outputEveryUnique && maxStepReached) //Either outputing every unique, or at the end of packing
+				) 
+			)
 			{
-				std::cout << "Rasterizing\n";
-				Volume v(_argRasterSize.Get(), TYPE_UCHAR);
-				v.getPtr().createTexture();
 
-				_sdfpacking->setRasterVolume(&v);
-				_sdfpacking->rasterize(true);
-				_sdfpacking->setRasterVolume(nullptr);
+				std::cout << "[" << iterCnt << "]\t";
+				std::cout << _sdfpacking->getSA().bestStateScore << std::endl;
+				std::cout.flush();				
 
-				std::cout << "Saving to " << _argOutput.Get() << std::endl;
 
-				if (saveVolumeBinary(_argOutput.Get().c_str(), v)) {
-					std::cout << "Complete" << std::endl;
+				if (_argOutputSDF) {
+
+					std::cout << "Saving SDF\n";
+					if (!fast::SDFSave(_sdfpacking->getSA().bestState, _argOutputSDF.Get())) {
+						std::cerr << "Failed to save SDF to " << _argOutputSDF.Get() << std::endl;
+
+					
+					}
+					else {
+
+						_sdfpacking->getSA().bestState = fast::SDFLoad(_argOutputSDF.Get(), [](const distfun::sdGridParam & tmp) { return nullptr; });
+					}
+
+					
+
 				}
-				else {
-					std::cerr << "Failed to save volume" << std::endl;
+
+				float porosity = 0;
+				float radBasic = 0;
+
+
+				if (_argOutput) {
+					std::cout << "Rasterizing\n";
+					Volume v(_argRasterSize.Get(), TYPE_UCHAR);
+					v.getPtr().createTexture();
+
+					_sdfpacking->setRasterVolume(&v);
+					_sdfpacking->rasterize(true);
+					_sdfpacking->setRasterVolume(nullptr);
+
+					std::cout << "Saving to " << _argOutput.Get() << std::endl;
+
+					if (saveVolumeBinary(_argOutput.Get().c_str(), v)) {
+						std::cout << "Complete" << std::endl;
+					}
+					else {
+						std::cerr << "Failed to save volume" << std::endl;
+					}
+
+					porosity = getPorosity<float>(v);
+
+					radBasic = fast::getReactiveAreaDensity<double>(v, v.dim(), 0.5f);
 				}
 
-				float porosity = getPorosity<float>(v);
+				
 
 				//////////////////////////////////////
 				RunRow gr;
@@ -138,6 +187,17 @@ public:
 				gr["overlap"] = _sdfpacking->getSA().bestStateScore;
 				gr["schedule"] = _argSchedule.Get();
 				gr["iterations"] = int(iterCnt);
+
+				gr["radBasic"] = radBasic;
+				_outputModule.addRunRow(gr);
+
+
+				if (outputEveryUnique) {
+					scoreSet.insert(_sdfpacking->getSA().bestStateScore);
+				}
+				else {
+					break;
+				}
 
 				{
 					/*std::cout << "rad basic.. " << std::endl;
@@ -152,21 +212,20 @@ public:
 					m.prepare();
 					m.getOutputModule().addGlobalRunRow(gr);
 					m.execute();*/					
-					float radBasic = fast::getReactiveAreaDensity<double>(v, v.dim(), 0.5f);
-					gr["radBasic"] = radBasic;
-					_outputModule.addRunRow(gr);
+					
 				}
 				//////////////////////////////////////
 			}
-
-			scoreSet.insert(_sdfpacking->getSA().bestStateScore);
+			else if (!isBelowTolerance && maxStepReached) {
+				std::cout << "Failed to pack below tolerance" << std::endl;
+				exit(77);
+			}
+			
 
 			iterCnt++;
 		}		
 
-		/*if (_sdfpacking->getSA().bestStateScore > _argTolerance.Get()) {
-			exit(77);
-		}*/
+		
 		
 
 		
@@ -196,6 +255,7 @@ private:
 	args::ValueFlag<fast::ivec3, IVec3Reader> _argRasterSize;
 
 	args::ValueFlag<std::string> _argOutput;
+	args::ValueFlag<std::string> _argOutputSDF;
 
 
 };

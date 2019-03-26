@@ -12,7 +12,7 @@ namespace fast {
 	struct PrimitiveCollisionPair{		
 		int indexA;
 		int indexB;
-		distfun::AABB bounds;		
+		distfun::sdAABB bounds;		
 	};
 
 

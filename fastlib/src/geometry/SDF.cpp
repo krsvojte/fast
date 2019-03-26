@@ -1,3 +1,7 @@
+#define DISTFUN_IMPLEMENTATION
+#define DISTFUN_ENABLE_CUDA
+#include "distfun/distfun.hpp"
+
 #include "geometry/SDF.h"
 #include "volume/Volume.h"
 #include "cuda/SDF.cuh"
@@ -5,15 +9,139 @@
 #include <glm/ext/matrix_transform.hpp>
 
 #include <iostream>
+#include <fstream>
 
 namespace fast {
 
-	SDFArray filterSDFByAABB(const SDFArray & arr, const distfun::AABB & domain)
+	bool SDFSave(const SDFArray & arr, const std::string & filename)
+	{
+		std::ofstream f(filename, std::ios::binary);
+
+		if (!f.good()) return false;
+		
+		//Write number of primitives
+		int N = static_cast<int>(arr.size());
+		f.write(reinterpret_cast<const char*>(&N), sizeof(int));
+		
+		struct Grid {
+			size_t byteSize;
+			size_t index;
+		};
+		std::unordered_map<const void *, Grid> gridmap;
+		std::vector<const void*> gridIndices;
+
+		//Save unique grid index and bytesize
+		for (auto & e : arr) {
+			if (e.type == distfun::sdPrimitive::SD_GRID) {
+				auto it = gridmap.find(e.params.grid.ptr);
+				if (it == gridmap.end()) {
+					gridIndices.push_back(e.params.grid.ptr);
+					size_t byteSize = e.params.grid.size.x * e.params.grid.size.y * e.params.grid.size.z * sizeof(float);
+					gridmap[e.params.grid.ptr] = { byteSize, gridIndices.size() - 1 };
+				}
+			}
+		}
+
+		//Write indiviudal primitives
+		for (auto & e : arr) {
+			distfun::sdPrimitive tmp = e;			
+			
+			//If its a grid, adjust its pointer to unique index
+			if (e.type == distfun::sdPrimitive::SD_GRID) {
+				tmp.params.grid.ptr = ((const char*)nullptr) + gridmap[e.params.grid.ptr].index;
+			}
+			f.write(reinterpret_cast<const char*>(&tmp), sizeof(distfun::sdPrimitive));
+
+		}
+
+		//Write number of grids
+		int gridN = static_cast<int>(gridIndices.size());
+		f.write(reinterpret_cast<const char*>(&gridN), sizeof(int));
+
+		//Write individual grids
+		for (auto ptr : gridIndices) {
+			size_t byteSize = gridmap[ptr].byteSize;
+			//Write number of bytes that the grid takes
+			f.write(reinterpret_cast<const char*>(&byteSize), sizeof(size_t));
+			//Write the grid
+			f.write(reinterpret_cast<const char*>(ptr), byteSize);			
+		}
+
+
+		return true;
+	}
+	
+
+	fast::SDFArray SDFLoad(const std::string & filename, std::function<const void *(const distfun::sdGridParam &tempGrid)> gridCallback)
+	{
+
+		std::ifstream f(filename, std::ios::binary);
+
+		SDFArray result;
+		if (!f.good()) return result;
+
+		int N = 0;
+		f.read(reinterpret_cast<char*>(&N), sizeof(int));
+		result.resize(N);
+
+		std::unordered_map<const void *, distfun::sdGridParam> gridParams;
+
+		for (auto i = 0; i < N; i++) {
+			f.read(reinterpret_cast<char*>(&result[i]), sizeof(distfun::sdPrimitive));		
+
+			//Save grid params
+			if (result[i].type == distfun::sdPrimitive::SD_GRID) {
+				gridParams[result[i].params.grid.ptr] = result[i].params.grid;
+			}
+		}
+
+		int gridN = 0;
+		f.read(reinterpret_cast<char*>(&gridN), sizeof(int));
+		std::vector<char> gridBuffer;
+
+		std::unordered_map<const void *, const void *> newGridPointers;
+
+		for (auto i = 0; i < gridN; i++) {
+			size_t byteSize = 0;
+			f.read(reinterpret_cast<char*>(&byteSize), sizeof(size_t));
+
+			gridBuffer.resize(byteSize);
+			f.read(gridBuffer.data(), byteSize);
+
+
+			//Callback func that should return newly allocated grid managed by the application
+			const void * persistentPointer = ((const char*)nullptr) + i;			
+			auto tmpGridParams = gridParams[persistentPointer];
+			tmpGridParams.ptr = gridBuffer.data();
+			newGridPointers[persistentPointer] = gridCallback(tmpGridParams);
+		}
+
+		//Change grid pointers
+		for (auto & e : result) {
+			if (e.type == distfun::sdPrimitive::SD_GRID) {
+				e.params.grid.ptr = newGridPointers[e.params.grid.ptr];
+			}
+		}
+
+		return result;
+	}
+
+	float volumeInBounds(const distfun::sdAABB & bounds, distfun::sdProgramStatic * programDataPtr, int maxDepth) {
+		return distfun::sdIntegrateProgramRecursiveExplicit<8, float>(
+			programDataPtr,
+			bounds,
+			distfun::sdIntegrateVolume,
+			maxDepth
+			);
+	}
+
+
+	SDFArray filterSDFByAABB(const SDFArray & arr, const distfun::sdAABB & domain)
 	{
 
 		SDFArray newArr;
 		for (auto & p : arr) {
-			auto pb = primitiveBounds(p, glm::length(domain.diagonal()) * 0.5f);
+			auto pb = distfun::sdPrimitiveBounds(p, glm::length(domain.diagonal()) * 0.5f);
 			if (pb.intersect(domain).isValid()) {
 				newArr.push_back(p);
 			}
@@ -22,38 +150,38 @@ namespace fast {
 		return newArr;
 	}
 
-	distfun::DistProgram SDFToProgram(const SDFArray & state, const distfun::AABB * inversionDomain, const distfun::Primitive * intersectionPrimitive)
+	distfun::sdProgram SDFToProgram(const SDFArray & state, const distfun::sdAABB * inversionDomain, const distfun::sdPrimitive * intersectionPrimitive)
 	{
 		if (state.size() == 0) {
-			return distfun::DistProgram();
+			return distfun::sdProgram();
 		}
 		//Build tree out of _primitives with _sa state transforms 
-		auto root = std::make_unique<distfun::TreeNode>();
+		auto root = std::make_unique<distfun::sdTreeNode>();
 		root->primitive = state.front();
 
 		for (auto i = 1; i < state.size(); i++) {
-			auto newNode = std::make_unique<distfun::TreeNode>();
+			auto newNode = std::make_unique<distfun::sdTreeNode>();
 			newNode->primitive = state[i];
 
-			auto newRoot = std::make_unique<distfun::TreeNode>();
-			newRoot->primitive.type = distfun::Primitive::Type::SD_OP_UNION;
+			auto newRoot = std::make_unique<distfun::sdTreeNode>();
+			newRoot->primitive.type = distfun::sdPrimitive::Type::SD_OP_UNION;
 			newRoot->children[0] = std::move(root);
 			newRoot->children[1] = std::move(newNode);
 			root = std::move(newRoot);
 		}
 
 		if (inversionDomain) {
-			distfun::Primitive box;
+			distfun::sdPrimitive box;
 			box.params.box.size = inversionDomain->diagonal() * 0.5f;
 			box.invTransform = glm::inverse(glm::translate(mat4(1.0f), inversionDomain->center()));
-			box.type = distfun::Primitive::SD_BOX;
+			box.type = distfun::sdPrimitive::SD_BOX;
 			box.rounding = 0.0f;
 
-			auto newNode = std::make_unique<distfun::TreeNode>();
+			auto newNode = std::make_unique<distfun::sdTreeNode>();
 			newNode->primitive = box;
 
-			auto newRoot = std::make_unique<distfun::TreeNode>();
-			newRoot->primitive.type = distfun::Primitive::Type::SD_OP_DIFFERENCE;
+			auto newRoot = std::make_unique<distfun::sdTreeNode>();
+			newRoot->primitive.type = distfun::sdPrimitive::Type::SD_OP_DIFFERENCE;
 			newRoot->children[0] = std::move(root);
 			newRoot->children[1] = std::move(newNode);
 			root = std::move(newRoot);			
@@ -61,59 +189,59 @@ namespace fast {
 
 		if (intersectionPrimitive) {
 
-			auto newNode = std::make_unique<distfun::TreeNode>();
+			auto newNode = std::make_unique<distfun::sdTreeNode>();
 			newNode->primitive = *intersectionPrimitive;
 
-			auto newRoot = std::make_unique<distfun::TreeNode>();
-			newRoot->primitive.type = distfun::Primitive::Type::SD_OP_INTERSECT;
+			auto newRoot = std::make_unique<distfun::sdTreeNode>();
+			newRoot->primitive.type = distfun::sdPrimitive::Type::SD_OP_INTERSECT;
 			newRoot->children[0] = std::move(root);
 			newRoot->children[1] = std::move(newNode);
 			root = std::move(newRoot);
 		
 		}
 
-		return distfun::compileProgram(*root);
+		return distfun::sdCompile(*root);
 	}
 
 
 
-	distfun::DistProgram SDFOverlapProgram(
+	distfun::sdProgram SDFOverlapProgram(
 		const SDFArray & arr,
-		const distfun::AABB & domain
+		const distfun::sdAABB & domain
 	){
 
 
 
-		distfun::DistProgram p;
+		distfun::sdProgram p;
 
 		if (arr.size() == 0) {
-			return distfun::DistProgram();
+			return distfun::sdProgram();
 		}
 
 		//Primitive bounds
-		std::vector<distfun::AABB> aabbs;
-		aabbs.resize(arr.size(), distfun::AABB());
+		std::vector<distfun::sdAABB> aabbs;
+		aabbs.resize(arr.size(), distfun::sdAABB());
 
 		for (auto i = 0; i < arr.size(); i++) {
-			aabbs[i] = primitiveBounds(arr[i], glm::length(domain.diagonal()) * 0.5f);
+			aabbs[i] = distfun::sdPrimitiveBounds(arr[i], glm::length(domain.diagonal()) * 0.5f);
 		}
 
 		std::vector<std::pair<int, int>> pairs;
-		std::vector<std::unique_ptr<distfun::TreeNode>> subtrees;
+		std::vector<std::unique_ptr<distfun::sdTreeNode>> subtrees;
 
 		for (auto i = 0; i < arr.size(); i++) {
 			for (auto j = i + 1; j < arr.size(); j++) {
 				if (!aabbs[i].intersect(aabbs[j]).isValid()) continue;					
 
-				auto nodeI = std::make_unique<distfun::TreeNode>();
+				auto nodeI = std::make_unique<distfun::sdTreeNode>();
 				nodeI->primitive = arr[i];
 
-				auto nodeJ = std::make_unique<distfun::TreeNode>();
+				auto nodeJ = std::make_unique<distfun::sdTreeNode>();
 				nodeJ->primitive = arr[j];
 
 
-				auto subRoot = std::make_unique<distfun::TreeNode>();
-				subRoot->primitive.type = distfun::Primitive::Type::SD_OP_INTERSECT;
+				auto subRoot = std::make_unique<distfun::sdTreeNode>();
+				subRoot->primitive.type = distfun::sdPrimitive::Type::SD_OP_INTERSECT;
 				subRoot->children[0] = std::move(nodeI);
 				subRoot->children[1] = std::move(nodeJ);
 
@@ -130,30 +258,30 @@ namespace fast {
 
 		//One overlap, return subtree directly
 		if(subtrees.size() == 1){
-			return distfun::compileProgram(*subtrees.front());
+			return distfun::sdCompile(*subtrees.front());
 		}
 
 		//Two or more, consturct tree tail
-		auto root = std::make_unique<distfun::TreeNode>();
-		root->primitive.type = distfun::Primitive::SD_OP_UNION;
+		auto root = std::make_unique<distfun::sdTreeNode>();
+		root->primitive.type = distfun::sdPrimitive::SD_OP_UNION;
 		root->children[0] = std::move(subtrees[0]);
 		root->children[1] = std::move(subtrees[1]);
 
 		//Add depth to tree
 		for (auto i = 2; i < subtrees.size(); i++) {
-			auto newRoot = std::make_unique<distfun::TreeNode>();
-			newRoot->primitive.type = distfun::Primitive::SD_OP_UNION;
+			auto newRoot = std::make_unique<distfun::sdTreeNode>();
+			newRoot->primitive.type = distfun::sdPrimitive::SD_OP_UNION;
 			newRoot->children[0] = std::move(root);
 			newRoot->children[1] = std::move(subtrees[i]);
 			root = std::move(newRoot);			
 		}
 
-		return distfun::compileProgram(*root);
+		return distfun::sdCompile(*root);
 	}
 
 	void SDFRasterize(
 		const SDFArray & arr, 
-		const distfun::AABB & domain, 
+		const distfun::sdAABB & domain, 
 		Volume & volume,
 		bool invert,
 		bool commitToGPU,
@@ -166,16 +294,17 @@ namespace fast {
 		if (overlap) {
 			auto program = SDFOverlapProgram(arr, domain);
 			programData.resize(program.staticSize());
-			commitProgramCPU(programData.data(), program);
+			
+			distfun::sdCommitCPU(programData.data(), program);
 		}
 		else {
 			auto program = SDFToProgram(arr, invert ? &domain : nullptr);
 			programData.resize(program.staticSize());
-			commitProgramCPU(programData.data(), program);
+			distfun::sdCommitCPU(programData.data(), program);
 		}	
 
-		distfun::DistProgramStatic *programDataPtr = 
-			reinterpret_cast<distfun::DistProgramStatic*>(programData.data());
+		distfun::sdProgramStatic *programDataPtr = 
+			reinterpret_cast<distfun::sdProgramStatic*>(programData.data());
 
 
 		uchar * volptr = (uchar*)volume.getPtr().getCPU();
@@ -201,13 +330,13 @@ namespace fast {
 					for (auto x = 0; x < volume.dim().x; x++) {
 						auto index = linearIndex(volume.dim(), ivec3(x, y, z));
 						distfun::vec3 pos = domain.min + vec3(cellSize.x * x, cellSize.y * y, cellSize.z* z) + cellSize * 0.5f;
-						float d = distfun::distanceAtPos<64>(pos, programDataPtr);
+						float d = distfun::sdDistanceAtPos<64>(pos, programDataPtr);
 						if (d >= 0.0f) {
 							volptr[index] = 0;
 							continue;
 						}
 
-						distfun::AABB sampleBB = { pos - cellSize * 0.5f, pos + cellSize * 0.5f };
+						distfun::sdAABB sampleBB = { pos - cellSize * 0.5f, pos + cellSize * 0.5f };
 						int sampleN = 2;
 						vec3 nsum = vec3(0);
 						for (auto ix = 0; ix < sampleN; ix++) {
@@ -215,7 +344,7 @@ namespace fast {
 								for (auto iz = 0; iz < sampleN; iz++) {
 									vec3 spos = sampleBB.getSubGrid(ivec3(2), ivec3(ix,iy,iz)).center();
 									float eps = minCellSize * 1;// / 10.0f;
-									vec3 n = distfun::distNormal(spos, eps, distfun::distanceAtPos<64>, programDataPtr);
+									vec3 n = distfun::sdNormal(spos, eps, distfun::sdDistanceAtPos<64>, programDataPtr);
 									nsum += n;
 									/*float nmag = glm::length(n);
 									if (nmag < eps*2.0f)
@@ -249,7 +378,7 @@ namespace fast {
 					for (auto x = 0; x < volume.dim().x; x++) {
 						auto index = linearIndex(volume.dim(), ivec3(x, y, z));
 						distfun::vec3 pos = domain.min + vec3(cellSize.x * x, cellSize.y * y, cellSize.z* z) + cellSize * 0.5f;
-						float d = distfun::distanceAtPos<64>(pos, programDataPtr);
+						float d = distfun::sdDistanceAtPos<64>(pos, programDataPtr);
 						volptr[index] = (d < 0.0f) ? 255 : 0;
 					}
 				}
@@ -270,7 +399,7 @@ namespace fast {
 
 	float SDFVolume(
 		const SDFArray & arr,
-		const distfun::AABB & domain,
+		const distfun::sdAABB & domain,
 		int maxDepth, /* = 4*/
 		bool onDevice /*= false */
 	)
@@ -290,14 +419,16 @@ namespace fast {
 							continue;
 
 						std::vector<unsigned char> programData(program.staticSize());
-						commitProgramCPU(programData.data(), program);
-						distfun::DistProgramStatic *programDataPtr = reinterpret_cast<distfun::DistProgramStatic*>(programData.data());
+						distfun::sdCommitCPU(programData.data(), program);
+						distfun::sdProgramStatic *programDataPtr = reinterpret_cast<distfun::sdProgramStatic*>(programData.data());
 
-						float val = distfun::volumeInBounds(
+						float val = volumeInBounds(subgrid, programDataPtr, maxDepth);
+
+						/*float val = distfun::volumeInBounds(
 							subgrid,
 							programDataPtr,
 							0, maxDepth
-						);
+						);*/
 
 #pragma omp atomic						
 						actualVolume += val;
@@ -321,13 +452,13 @@ namespace fast {
 	vec4 voidGravity(
 		vec3 pt0,
 		float m0,
-		const distfun::AABB & bounds,
-		distfun::DistProgramStatic * program,		
+		const distfun::sdAABB & bounds,
+		distfun::sdProgramStatic * program,		
 		int curDepth,
 		int maxDepth
 	) {
 		const vec3 pt = bounds.center();
-		const float d = distfun::distanceAtPos<8>(pt, program);
+		const float d = distfun::sdDistanceAtPos<8>(pt, program);
 
 		//If nearest surface is outside of bounds
 		const vec3 diagonal = bounds.diagonal();
@@ -350,7 +481,7 @@ namespace fast {
 			//const float L = distDifference(da, db);
 
 			//Normal to nearest non-penetrating surface of a
-			/*const vec3 N = distNormal(pt, 0.0001f, distPrimitiveDifference, a, b);
+			/*const vec3 N = sdNormal(pt, 0.0001f, distPrimitiveDifference, a, b);
 			const float magnitude = 0.5f * k * (L*L);
 			const vec3 U = magnitude * N;
 			return vec4(U, magnitude);*/
@@ -368,7 +499,7 @@ namespace fast {
 
 	}
 
-	std::vector<vec4> SDFElasticity(const SDFArray & s, const distfun::AABB & domain, RNGUniformFloat & rng, int maxDepth /*= 3*/, bool onDevice /*= false */)
+	std::vector<vec4> SDFElasticity(const SDFArray & s, const distfun::sdAABB & domain, RNGUniformFloat & rng, int maxDepth /*= 3*/, bool onDevice /*= false */)
 	{
 
 		std::vector<vec4> result(s.size(),vec4(0.0f));
@@ -383,11 +514,11 @@ namespace fast {
 
 
 		//Primitive bounds
-		std::vector<distfun::AABB> aabbs;
-		aabbs.resize(s.size(), distfun::AABB());
+		std::vector<distfun::sdAABB> aabbs;
+		aabbs.resize(s.size(), distfun::sdAABB());
 
 		for (auto i = 0; i < s.size(); i++) {
-			aabbs[i] = primitiveBounds(s[i], glm::length(domain.diagonal()) * 0.5f);
+			aabbs[i] = distfun::sdPrimitiveBounds(s[i], glm::length(domain.diagonal()) * 0.5f);
 		}
 
 
@@ -402,8 +533,8 @@ namespace fast {
 			
 			auto program = SDFToProgram(filterSDFByAABB(s, bb), &domain);
 			std::vector<unsigned char> programData(program.staticSize());
-			commitProgramCPU(programData.data(), program);
-			distfun::DistProgramStatic *programDataPtr = reinterpret_cast<distfun::DistProgramStatic*>(programData.data());
+			distfun::sdCommitCPU(programData.data(), program);
+			distfun::sdProgramStatic *programDataPtr = reinterpret_cast<distfun::sdProgramStatic*>(programData.data());
 
 			
 			//result[i] = voidGravity(pt, domain, programDataPtr, 0, maxDepth);
@@ -427,12 +558,12 @@ namespace fast {
 		//Far collision phase
 		std::vector<PrimitiveCollisionPair> pairs;
 		for (auto i = 0; i < s.size(); i++) {
-			const distfun::AABB & abb = aabbs[i];
+			const distfun::sdAABB & abb = aabbs[i];
 			for (auto j = 0; j < s.size(); j++) {
 
 				if (i == j) continue;
-				const distfun::AABB & bbb = aabbs[j];
-				const distfun::AABB isect = abb.intersect(bbb);
+				const distfun::sdAABB & bbb = aabbs[j];
+				const distfun::sdAABB isect = abb.intersect(bbb);
 				if (!isect.isValid())
 					continue;
 
@@ -502,7 +633,7 @@ namespace fast {
 
 			/*float k = (totalVolume / isect.volume()) * (8.0f / 1.0f);			
 
-			vec4 Um = distfun::primitiveElasticity(isect, a, b, k, 0, maxDepth);*/
+			vec4 Um = distfun::sdPrimitiveElasticity(isect, a, b, k, 0, maxDepth);*/
 			
 			#pragma omp atomic			
 			result[pair.indexA].x += Um.x;
@@ -529,36 +660,36 @@ namespace fast {
 
 	}
 
-	std::vector<float> SDFPerParticleOverlap(const SDFArray & s, const distfun::AABB & domain, int maxDepth /*= 0 */)
+	std::vector<float> SDFPerParticleOverlap(const SDFArray & s, const distfun::sdAABB & domain, int maxDepth /*= 0 */)
 	{
 
 		std::vector<float> res(s.size(),0.0f);
 
 		//Primitive bounds
-		std::vector<distfun::AABB> aabbs;
-		aabbs.resize(s.size(), distfun::AABB());
+		std::vector<distfun::sdAABB> aabbs;
+		aabbs.resize(s.size(), distfun::sdAABB());
 
 		for (auto i = 0; i < s.size(); i++) {
-			aabbs[i] = primitiveBounds(s[i], glm::length(domain.diagonal()) * 0.5f);
+			aabbs[i] = distfun::sdPrimitiveBounds(s[i], glm::length(domain.diagonal()) * 0.5f);
 		}
 
 
 		//std::vector<PrimitiveCollisionPair> pairs;
 		//std::vector<int> objCol(s.size(), 0);
-		std::vector<std::vector<distfun::Primitive>> collisions;
+		std::vector<std::vector<distfun::sdPrimitive>> collisions;
 		collisions.resize(s.size());
 
 		for (auto i = 0; i < s.size(); i++) {
-			const distfun::AABB & abb = aabbs[i];			
+			const distfun::sdAABB & abb = aabbs[i];			
 			for (auto j = i + 1; j < s.size(); j++) {
 
 				//if (i == j) continue;
-				const distfun::AABB & bbb = aabbs[j];
-				const distfun::AABB isect = abb.intersect(bbb);
+				const distfun::sdAABB & bbb = aabbs[j];
+				const distfun::sdAABB isect = abb.intersect(bbb);
 				if (!isect.isValid())
 					continue;
 
-				float v = intersectionVolume(isect, s[i], s[j], 0, maxDepth);
+				float v = distfun::sdIntersectionVolume(isect, s[i], s[j], 0, maxDepth);
 				res[i] += v;
 				res[j] += v;
 					
@@ -581,14 +712,10 @@ namespace fast {
 
 			auto program = SDFToProgram(cols, nullptr, &s[i]);
 			std::vector<unsigned char> programData(program.staticSize());
-			commitProgramCPU(programData.data(), program);
-			distfun::DistProgramStatic *programDataPtr = reinterpret_cast<distfun::DistProgramStatic*>(programData.data());
+			distfun::sdCommitCPU(programData.data(), program);
+			distfun::sdProgramStatic *programDataPtr = reinterpret_cast<distfun::sdProgramStatic*>(programData.data());
 			
-			float val = distfun::volumeInBounds(
-				aabbs[i],
-				programDataPtr,
-				0, maxDepth
-			);
+			float val = volumeInBounds(aabbs[i], programDataPtr, maxDepth);
 			res[i] = val;
 		}
 

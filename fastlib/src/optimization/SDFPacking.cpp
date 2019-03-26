@@ -1,5 +1,3 @@
-
-
 #include "optimization/SDFPacking.h"
 #include "volume/Volume.h"
 #include "utility/PoissonSampler.h"
@@ -13,9 +11,7 @@
 
 #include <iostream>
 
-#define DISTFUN_IMPLEMENTATION
-#define DISTFUN_ENABLE_CUDA
-#include "distfun/distfun.hpp"
+
 
 
 
@@ -39,16 +35,16 @@ fast::SDFPacking::~SDFPacking()
 
 }
 
-void fast::SDFPacking::addPrimitive(const distfun::Primitive & primitive)
+void fast::SDFPacking::addPrimitive(const distfun::sdPrimitive & primitive)
 {
 	_initState.push_back(primitive);	
 }
 
 void fast::SDFPacking::addEllipse(size_t N, vec3 size)
 {
-	distfun::Primitive p;
+	distfun::sdPrimitive p;
 	p.invTransform = distfun::mat4(1.0f);
-	p.type = distfun::Primitive::SD_ELLIPSOID;
+	p.type = distfun::sdPrimitive::SD_ELLIPSOID;
 	p.rounding = 0.0f;
 	p.params.ellipsoid.size = size;
 	for (auto i = 0; i < N; i++) {
@@ -90,8 +86,6 @@ bool fast::SDFPacking::init(const fast::SDFPacking::Params & __params)
 	
 
 	_sa.score = [&](const State & s) {
-
-
 		/*
 		Show current state (not scored one)
 		*/
@@ -104,71 +98,7 @@ bool fast::SDFPacking::init(const fast::SDFPacking::Params & __params)
 		}
 
 		return getMaxPenetrationFraction(3, &s);
-
-		float totalVolume = 0.0f;
-
 		
-		for(auto p : s){			
-			auto T = glm::inverse(p.invTransform);
-			if (p.type == distfun::Primitive::SD_ELLIPSOID) {
-				const auto size = p.params.ellipsoid.size;
-				const auto scale = vec3(
-					glm::length(vec3(T[0])),
-					glm::length(vec3(T[1])),
-					glm::length(vec3(T[2]))
-				);
-				const vec3 s = size * scale; 
-				totalVolume += s.x * s.y * s.z * (4.0f / 3.0f) * glm::pi<float>();
-			}
-		}
-
-		/*
-			Calculate actual union volume
-		*/
-
-		
-
-
-		///////////////// BBs
-		if (_currentParams.allowPartialOutside) {
-			float maxDist = glm::length(_domain.diagonal());
-			float bbIntersectionVolume = 0.0f;
-			for (auto & p : s) {
-				auto dbb = primitiveBounds(p, glm::length(_domain.diagonal()) * 0.5f);
-				AABB bb = { dbb.min, dbb.max };
-				AABB isectbb = bb.getIntersection(_domain);
-
-				if (isectbb.isValid()) {
-					bbIntersectionVolume += (bb.volume() - isectbb.volume()) / bb.volume();
-				}
-				else {
-					bbIntersectionVolume += bb.volume() / bb.volume();
-				}
-			}
-			bbIntersectionVolume /= s.size();
-		}
-
-
-
-
-		
-		
-		/*float minPorosity = 1.0f - (totalVolume / _domain.volume());
-
-		float porosity = getPorosity(4);
-				
-		float overlap = glm::abs(totalVolume - actualVolume) / totalVolume;
-
-		if (_currentParams.verbose) {
-			std::cout << "porosity: " << porosity << 
-				", min achieavable: " << minPorosity << 
-				", best: " << _sa.bestStateScore << 
-				", overlap: " << overlap << std::endl;
-		}*/
-		
-
-		
-		//return porosity;
 	};
 
 	_sa.getNeighbour = [&](const State & s) {		
@@ -188,7 +118,7 @@ bool fast::SDFPacking::init(const fast::SDFPacking::Params & __params)
 		aabbs.resize(s.size(), AABB());
 
 		for (auto i = 0; i < s.size(); i++) {
-			auto tmp = primitiveBounds(s[i], glm::length(_domain.diagonal()) * 0.5f);;
+			auto tmp = distfun::sdPrimitiveBounds(s[i], glm::length(_domain.diagonal()) * 0.5f);;
 			aabbs[i] = AABB(tmp.min, tmp.max);
 		}
 
@@ -284,7 +214,7 @@ bool fast::SDFPacking::init(const fast::SDFPacking::Params & __params)
 			p.invTransform[3] = vec4(-tvec, 1.0f);
 
 			//Clamp bounds
-			auto tmp = primitiveBounds(p, glm::length(_domain.diagonal()) * 0.5f);;
+			auto tmp = distfun::sdPrimitiveBounds(p, glm::length(_domain.diagonal()) * 0.5f);;
 			AABB bb = { tmp.min, tmp.max };
 			vec3 clampMove = bb.getContainment(_domain);
 			{
@@ -303,14 +233,11 @@ bool fast::SDFPacking::init(const fast::SDFPacking::Params & __params)
 		
 
 
-		//perturbe state
-
 		return s1;
 	};
 
 	_sa.getTemperature = [=](float fraction, size_t iteration){
-		const float k = _currentParams.annealingSchedule;
-		//const float T0 = 0.05f;
+		const float k = _currentParams.annealingSchedule;		
 		const float T0 = _currentParams.startingTemperature;
 		return T0 * powf(k, float(iteration));
 	};
@@ -349,25 +276,11 @@ void fast::SDFPacking::rasterize(bool commit)
 {
 	if (!_rasterVolume) return;
 
-
-	if (_showBest) {		
-		SDFRasterize(_sa.bestState,
+	SDFRasterize(_showBest ? _sa.bestState : _sa.state,
 		{ _domain.min, _domain.max },
-			*_rasterVolume,
-			false,
-			commit);
-		
-	}
-	else {
-		SDFRasterize(_sa.state,
-		{ _domain.min, _domain.max },
-			*_rasterVolume,
-			false,
-			commit);
-		
-	}
-
-
+		*_rasterVolume,
+		false,
+		commit);
 }
 
 FAST_EXPORT void fast::SDFPacking::rasterizeOverlap(Volume & volume)
@@ -388,7 +301,7 @@ std::vector<fast::AABB> fast::SDFPacking::getParticleBounds() const
 
 	aabbs.resize(s.size(), AABB());
 	for (auto i = 0; i < s.size(); i++) {
-		auto tmp = primitiveBounds(s[i], glm::length(_domain.diagonal()) * 0.5f);
+		auto tmp = distfun::sdPrimitiveBounds(s[i], glm::length(_domain.diagonal()) * 0.5f);
 		aabbs[i] = AABB(tmp.min, tmp.max);
 	}
 
@@ -405,14 +318,14 @@ std::vector<fast::AABB> fast::SDFPacking::getParticleBounds() const
 	
 	int maxIndex = std::distance(overlap.begin(), std::max_element(overlap.begin(), overlap.end()));
 	auto & prim = s[maxIndex];
-	const std::vector<distfun::Primitive> arr = { prim };
-	float volume = SDFVolume(arr, primitiveBounds(prim, glm::length(_domain.diagonal()) * 0.5f), depth + 1);
+	const std::vector<distfun::sdPrimitive> arr = { prim };
+	float volume = SDFVolume(arr, distfun::sdPrimitiveBounds(prim, glm::length(_domain.diagonal()) * 0.5f), depth + 1);
 	float v3 = std::cbrtf(volume);
 
 	float avgOverlap = std::accumulate(overlap.begin(), overlap.end(), 0.0f) / overlap.size();
 
-	//return (overlap[maxIndex] / volume) * v3;
-	return (avgOverlap / volume) * v3;
+	return (overlap[maxIndex] / volume) * v3;
+	//return (avgOverlap / volume) * v3;
 
 }
 

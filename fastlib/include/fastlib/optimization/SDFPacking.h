@@ -52,7 +52,7 @@ namespace fast {
 			DOF_SCALE = 3
 		};
 
-		void addPrimitive(const distfun::Primitive & primitive);
+		void addPrimitive(const distfun::sdPrimitive & primitive);
 
 		FAST_EXPORT void addEllipse(size_t N, vec3 size);
 
@@ -73,6 +73,10 @@ namespace fast {
 		FAST_EXPORT std::vector<AABB> getParticleBounds() const;
 
 		FAST_EXPORT const SimulatedAnnealing<State> & getSA() const {
+			return _sa;
+		}
+
+		FAST_EXPORT SimulatedAnnealing<State> & getSA() {
 			return _sa;
 		}
 		
