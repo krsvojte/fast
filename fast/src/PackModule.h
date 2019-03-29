@@ -105,11 +105,10 @@ public:
 					break;*/
 			}
 
-			if (_sdfpacking->getSA().rejections > 100) {
+			/*if (_sdfpacking->getSA().rejections > 500) {
 				std::cout << "Too many rejections. Stopping." << std::endl;				
-				maxStepReached = true;
-				break;
-			}
+				maxStepReached = true;				
+			}*/
 
 			if (_sdfpacking->getSA().bestStateScore <= 1e-6) {
 				maxStepReached = true;
@@ -134,15 +133,8 @@ public:
 
 					std::cout << "Saving SDF\n";
 					if (!fast::SDFSave(_sdfpacking->getSA().bestState, _argOutputSDF.Get())) {
-						std::cerr << "Failed to save SDF to " << _argOutputSDF.Get() << std::endl;
-
-					
+						std::cerr << "Failed to save SDF to " << _argOutputSDF.Get() << std::endl;					
 					}
-					else {
-
-						_sdfpacking->getSA().bestState = fast::SDFLoad(_argOutputSDF.Get(), [](const distfun::sdGridParam & tmp) { return nullptr; });
-					}
-
 					
 
 				}
@@ -199,8 +191,8 @@ public:
 					break;
 				}
 
-				{
-					/*std::cout << "rad basic.. " << std::endl;
+				/*{
+					std::cout << "rad basic.. " << std::endl;
 					args::ArgumentParser parser("N/A", "N/A");
 					AlphaModule m(parser);
 					parser.ParseArgs(std::vector<std::string>{
@@ -211,14 +203,15 @@ public:
 					});
 					m.prepare();
 					m.getOutputModule().addGlobalRunRow(gr);
-					m.execute();*/					
+					m.execute();					
 					
-				}
+				}*/
 				//////////////////////////////////////
 			}
 			else if (!isBelowTolerance && maxStepReached) {
 				std::cout << "Failed to pack below tolerance" << std::endl;
 				exit(77);
+
 			}
 			
 
